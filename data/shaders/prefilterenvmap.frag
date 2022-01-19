@@ -10,7 +10,8 @@ layout(push_constant) uniform PushConsts {
 	layout (offset = 68) uint numSamples;
 } consts;
 
-const float PI = 3.1415926536;
+#define PI 3.1415926535897932384626433832795f
+#define TWO_PI 6.283185307179586476925286766559f
 
 // Based omn http://byteblacksmith.com/improvements-to-the-canonical-one-liner-glsl-rand-for-opengl-es-2-0/
 float random(vec2 co)
@@ -35,20 +36,34 @@ vec2 hammersley2d(uint i, uint N)
 	return vec2(float(i) /float(N), rdi);
 }
 
+// Building an Orthonormal Basis, Revisited
+// by Tom Duff, James Burgess, Per Christensen, Christophe Hery, Andrew Kensler, Max Liani, Ryusuke Villemin
+// https://graphics.pixar.com/library/OrthonormalB/
+//-----------------------------------------------------------------------
+void Onb(in vec3 N, inout vec3 T, inout vec3 B)
+//-----------------------------------------------------------------------
+{
+	float sgn = N.z >= 0.0f ? 1.0f : -1.0f;
+	float aa = - 1.0f / (sgn + N.z);
+	float bb = N.x * N.y * aa;	
+	
+	T = vec3(1.0f + sgn * N.x * N.x * aa, sgn * bb, -sgn * N.x);
+	B = vec3(bb, sgn + N.y * N.y * aa, -N.y);
+}
+
 // Based on http://blog.selfshadow.com/publications/s2013-shading-course/karis/s2013_pbs_epic_slides.pdf
 vec3 importanceSample_GGX(vec2 Xi, float roughness, vec3 normal) 
 {
 	// Maps a 2D point to a hemisphere with spread based on roughness
 	float alpha = roughness * roughness;
-	float phi = 2.0 * PI * Xi.x + random(normal.xz) * 0.1;
+	float phi = TWO_PI * Xi.x + random(normal.xz) * 0.1;
 	float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (alpha*alpha - 1.0) * Xi.y));
 	float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
 	vec3 H = vec3(sinTheta * cos(phi), sinTheta * sin(phi), cosTheta);
 
 	// Tangent space
-	vec3 up = abs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
-	vec3 tangentX = normalize(cross(up, normal));
-	vec3 tangentY = normalize(cross(normal, tangentX));
+	vec3 tangentX, tangentY;
+	Onb(normal, tangentX, tangentY);
 
 	// Convert to world Space
 	return normalize(tangentX * H.x + tangentY * H.y + normal * H.z);
@@ -70,10 +85,13 @@ vec3 prefilterEnvMap(vec3 R, float roughness)
 	vec3 color = vec3(0.0);
 	float totalWeight = 0.0;
 	float envMapDim = float(textureSize(samplerEnv, 0).s);
+	
+	// Solid angle of 1 pixel across all cube faces
+	float omegaP = TWO_PI / (3.0 * envMapDim * envMapDim);
 	for(uint i = 0u; i < consts.numSamples; i++) {
 		vec2 Xi = hammersley2d(i, consts.numSamples);
 		vec3 H = importanceSample_GGX(Xi, roughness, N);
-		vec3 L = 2.0 * dot(V, H) * H - V;
+		vec3 L = dot(V, H) * (H+H) - V;
 		float dotNL = clamp(dot(N, L), 0.0, 1.0);
 		if(dotNL > 0.0) {
 			// Filtering based on https://placeholderart.wordpress.com/2015/07/28/implementation-notes-runtime-environment-map-filtering-for-image-based-lighting/
@@ -85,8 +103,6 @@ vec3 prefilterEnvMap(vec3 R, float roughness)
 			float pdf = D_GGX(dotNH, roughness) * dotNH / (4.0 * dotVH) + 0.0001;
 			// Slid angle of current smple
 			float omegaS = 1.0 / (float(consts.numSamples) * pdf);
-			// Solid angle of 1 pixel across all cube faces
-			float omegaP = 4.0 * PI / (6.0 * envMapDim * envMapDim);
 			// Biased (+1.0) mip level for better result
 			float mipLevel = roughness == 0.0 ? 0.0 : max(0.5 * log2(omegaS / omegaP) + 1.0, 0.0f);
 			color += textureLod(samplerEnv, L, mipLevel).rgb * dotNL;

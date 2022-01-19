@@ -11,7 +11,9 @@ layout(push_constant) uniform PushConsts {
 	layout (offset = 68) float deltaTheta;
 } consts;
 
-#define PI 3.1415926535897932384626433832795
+#define PI 3.1415926535897932384626433832795f
+#define TWO_PI 6.283185307179586476925286766559f
+#define HALF_PI 1.5707963267948966192313216916398f
 
 void main()
 {
@@ -19,9 +21,6 @@ void main()
 	vec3 up = vec3(0.0, 1.0, 0.0);
 	vec3 right = normalize(cross(up, N));
 	up = cross(N, right);
-
-	const float TWO_PI = PI * 2.0;
-	const float HALF_PI = PI * 0.5;
 
 	vec3 color = vec3(0.0);
 	uint sampleCount = 0u;
