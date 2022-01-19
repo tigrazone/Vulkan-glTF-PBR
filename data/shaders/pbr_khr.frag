@@ -175,7 +175,9 @@ vec3 diffuse(PBRInfo pbrInputs)
 // Implementation of fresnel from [4], Equation 15
 vec3 specularReflection(PBRInfo pbrInputs)
 {
-	return pbrInputs.reflectance0 + (pbrInputs.reflectance90 - pbrInputs.reflectance0) * pow(clamp(1.0 - pbrInputs.VdotH, 0.0, 1.0), 5.0);
+	float VdotH1 = clamp(1.0 - pbrInputs.VdotH, 0.0, 1.0);
+	float VdotH12 = VdotH1*VdotH1;
+	return pbrInputs.reflectance0 + (pbrInputs.reflectance90 - pbrInputs.reflectance0) * (VdotH12*VdotH12*VdotH1);
 }
 
 // This calculates the specular geometric attenuation (aka G()),
@@ -188,8 +190,8 @@ float geometricOcclusion(PBRInfo pbrInputs)
 	float NdotV = pbrInputs.NdotV;
 	float r = pbrInputs.alphaRoughness;
 
-	float attenuationL = 2.0 * NdotL / (NdotL + sqrt(r * r + (1.0 - r * r) * (NdotL * NdotL)));
-	float attenuationV = 2.0 * NdotV / (NdotV + sqrt(r * r + (1.0 - r * r) * (NdotV * NdotV)));
+	float attenuationL = NdotL / (NdotL + sqrt(r + (1.0 - r) * (NdotL * NdotL)));
+	float attenuationV = NdotV / (NdotV + sqrt(r + (1.0 - r) * (NdotV * NdotV)));
 	return attenuationL * attenuationV;
 }
 
@@ -198,23 +200,26 @@ float geometricOcclusion(PBRInfo pbrInputs)
 // Follows the distribution function recommended in the SIGGRAPH 2013 course notes from EPIC Games [1], Equation 3.
 float microfacetDistribution(PBRInfo pbrInputs)
 {
-	float roughnessSq = pbrInputs.alphaRoughness * pbrInputs.alphaRoughness;
+	float roughnessSq = pbrInputs.alphaRoughness;
 	float f = (pbrInputs.NdotH * roughnessSq - pbrInputs.NdotH) * pbrInputs.NdotH + 1.0;
 	return roughnessSq / (M_PI * f * f);
 }
 
+vec3 dotLUM = vec3(0.212671f, 0.715160f, 0.072169f);
+
 // Gets metallic factor from specular glossiness workflow inputs 
 float convertMetallic(vec3 diffuse, vec3 specular, float maxSpecular) {
-	float perceivedDiffuse = sqrt(0.299 * diffuse.r * diffuse.r + 0.587 * diffuse.g * diffuse.g + 0.114 * diffuse.b * diffuse.b);
-	float perceivedSpecular = sqrt(0.299 * specular.r * specular.r + 0.587 * specular.g * specular.g + 0.114 * specular.b * specular.b);
+	float perceivedSpecular = sqrt(dot(dotLUM, vec3(specular.r * specular.r, specular.g * specular.g, specular.b * specular.b)));
 	if (perceivedSpecular < c_MinRoughness) {
 		return 0.0;
 	}
-	float a = c_MinRoughness;
-	float b = perceivedDiffuse * (1.0 - maxSpecular) / (1.0 - c_MinRoughness) + perceivedSpecular - 2.0 * c_MinRoughness;
+	
+	float perceivedDiffuse = sqrt(dot(dotLUM, vec3(diffuse.r * diffuse.r, diffuse.g * diffuse.g, diffuse.b * diffuse.b)));
+	float a = c_MinRoughness + c_MinRoughness;
+	float b = perceivedDiffuse * (1.0 - maxSpecular) / (1.0 - c_MinRoughness) + perceivedSpecular - a;
 	float c = c_MinRoughness - perceivedSpecular;
-	float D = max(b * b - 4.0 * a * c, 0.0);
-	return clamp((-b + sqrt(D)) / (2.0 * a), 0.0, 1.0);
+	float D = max(b * b - (a + a) * c, 0.0);
+	return clamp((-b + sqrt(D)) / a, 0.0, 1.0);
 }
 
 void main()
@@ -327,7 +332,7 @@ void main()
 		metallic,
 		specularEnvironmentR0,
 		specularEnvironmentR90,
-		alphaRoughness,
+		alphaRoughness*alphaRoughness,
 		diffuseColor,
 		specularColor
 	);
@@ -341,7 +346,7 @@ void main()
 
 	// Calculation of analytical lighting contribution
 	vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);
-	vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
+	vec3 specContrib = F * G * D / (NdotL * NdotV);
 	// Obtain final intensity as reflectance (BRDF) scaled by the energy of the light (cosine law)
 	vec3 color = NdotL * u_LightColor * (diffuseContrib + specContrib);
 
