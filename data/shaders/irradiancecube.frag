@@ -1,6 +1,7 @@
 // Generates an irradiance cube from an environment map using convolution
 
 #version 450
+#extension GL_GOOGLE_include_directive : enable
 
 layout (location = 0) in vec3 inPos;
 layout (location = 0) out vec4 outColor;
@@ -11,9 +12,7 @@ layout(push_constant) uniform PushConsts {
 	layout (offset = 68) float deltaTheta;
 } consts;
 
-#define PI 3.1415926535897932384626433832795f
-#define TWO_PI 6.283185307179586476925286766559f
-#define HALF_PI 1.5707963267948966192313216916398f
+#include "common.glsl"
 
 void main()
 {
@@ -24,13 +23,13 @@ void main()
 
 	vec3 color = vec3(0.0);
 	uint sampleCount = 0u;
-	for (float phi = 0.0; phi < TWO_PI; phi += consts.deltaPhi) {
-		for (float theta = 0.0; theta < HALF_PI; theta += consts.deltaTheta) {
+	for (float phi = 0.0; phi < M_TWO_PI; phi += consts.deltaPhi) {
+		for (float theta = 0.0; theta < M_HALF_PI; theta += consts.deltaTheta) {
 			vec3 tempVec = cos(phi) * right + sin(phi) * up;
 			vec3 sampleVector = cos(theta) * N + sin(theta) * tempVec;
 			color += texture(samplerEnv, sampleVector).rgb * cos(theta) * sin(theta);
 			sampleCount++;
 		}
 	}
-	outColor = vec4(PI * color / float(sampleCount), 1.0);
+	outColor = vec4(M_PI * color / float(sampleCount), 1.0);
 }

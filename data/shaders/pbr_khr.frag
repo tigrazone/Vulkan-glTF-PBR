@@ -3,6 +3,7 @@
 // Supports both metallic roughness and specular glossiness inputs
 
 #version 450
+#extension GL_GOOGLE_include_directive : enable
 
 layout (location = 0) in vec3 inWorldPos;
 layout (location = 1) in vec3 inNormal;
@@ -78,7 +79,8 @@ struct PBRInfo
 	vec3 specularColor;           // color contribution from specular lighting
 };
 
-const float M_PI = 3.141592653589793;
+#include "common.glsl"
+
 const float c_MinRoughness = 0.04;
 
 const float PBR_WORKFLOW_METALLIC_ROUGHNESS = 0.0;
@@ -168,7 +170,7 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
 // See also [1], Equation 1
 vec3 diffuse(PBRInfo pbrInputs)
 {
-	return pbrInputs.diffuseColor / M_PI;
+	return pbrInputs.diffuseColor * M_INV_PI;
 }
 
 // The following equation models the Fresnel reflectance term of the spec equation (aka F())

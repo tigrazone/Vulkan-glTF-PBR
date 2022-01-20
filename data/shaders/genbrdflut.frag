@@ -1,12 +1,13 @@
 #version 450
+#extension GL_GOOGLE_include_directive : enable
 
 layout (location = 0) in vec2 inUV;
 layout (location = 0) out vec4 outColor;
 layout (constant_id = 0) const uint NUM_SAMPLES = 1024u;
 
-#define M_TWO_PI 6.283185307179586476925286766559f
+#include "common.glsl"
 
-// Based omn http://byteblacksmith.com/improvements-to-the-canonical-one-liner-glsl-rand-for-opengl-es-2-0/
+// Based on http://byteblacksmith.com/improvements-to-the-canonical-one-liner-glsl-rand-for-opengl-es-2-0/
 float random(vec2 co)
 {
 	float a = 12.9898;
@@ -27,22 +28,6 @@ vec2 hammersley2d(uint i, uint N)
 	bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
 	float rdi = float(bits) * 2.3283064365386963e-10;
 	return vec2(float(i) /float(N), rdi);
-}
-
-
-// Building an Orthonormal Basis, Revisited
-// by Tom Duff, James Burgess, Per Christensen, Christophe Hery, Andrew Kensler, Max Liani, Ryusuke Villemin
-// https://graphics.pixar.com/library/OrthonormalB/
-//-----------------------------------------------------------------------
-void Onb(in vec3 N, inout vec3 T, inout vec3 B)
-//-----------------------------------------------------------------------
-{
-	float sgn = N.z >= 0.0f ? 1.0f : -1.0f;
-	float aa = - 1.0f / (sgn + N.z);
-	float bb = N.x * N.y * aa;	
-	
-	T = vec3(1.0f + sgn * N.x * N.x * aa, sgn * bb, -sgn * N.x);
-	B = vec3(bb, sgn + N.y * N.y * aa, -N.y);
 }
 
 // Based on http://blog.selfshadow.com/publications/s2013-shading-course/karis/s2013_pbs_epic_slides.pdf
@@ -77,15 +62,15 @@ vec2 BRDF(float NoV, float roughness)
 	// Normal always points along z-axis for the 2D lookup 
 	const vec3 N = vec3(0.0, 0.0, 1.0);
 	vec3 V = vec3(sqrt(1.0 - NoV*NoV), 0.0, NoV);
+	float dotNV = max(dot(N, V), 0.0);
 
 	vec2 LUT = vec2(0.0);
 	for(uint i = 0u; i < NUM_SAMPLES; i++) {
 		vec2 Xi = hammersley2d(i, NUM_SAMPLES);
 		vec3 H = importanceSample_GGX(Xi, roughness, N);
-		vec3 L = 2.0 * dot(V, H) * H - V;
+		vec3 L = dot(V, H) * (H+H) - V;
 
 		float dotNL = max(dot(N, L), 0.0);
-		float dotNV = max(dot(N, V), 0.0);
 		float dotVH = max(dot(V, H), 0.0); 
 		float dotNH = max(dot(H, N), 0.0);
 
